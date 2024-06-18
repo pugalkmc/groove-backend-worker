@@ -1,3 +1,5 @@
+import os
+os.environ['USER_AGENT'] = 'pugal'
 from flask import Flask, jsonify, request
 from bson import ObjectId
 import threading
@@ -11,27 +13,21 @@ import time
 from db import sources_collection
 from pinecone import Pinecone, ServerlessSpec
 from flask_cors import CORS
+from config import PINECONE_API_KEY
 
 current_jobs = set()
 
 app = Flask(__name__)
-
-
 CORS(app)
 
-# Middleware to dynamically adjust CORS based on request or environment
 @app.before_request
 def before_request():
-    if request.remote_addr == 'specific_server_ip':  # Replace with the condition you need
+    if request.remote_addr == 'specific_server_ip':
         CORS(app, resources={r"/*": {"origins": "http://specificserver.com"}})
     else:
         CORS(app, resources={r"/*": {"origins": "*"}})
-        
 
-YOUR_API_KEY = os.getenv("PINECONE_API_KEY", "62db2f2c-50a6-4e4e-a197-a25e95c10ad0")
-
-
-pc = Pinecone(api_key=YOUR_API_KEY)
+pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "common"
 BATCH_SIZE = 1000
 DIMENSION = 768
@@ -44,7 +40,6 @@ index = pc.Index(INDEX_NAME)
 def scrape_and_store(source_id):
     try:
         source_to_scrape = sources_collection.find_one({'_id': ObjectId(source_id)})
-
         if source_to_scrape and not source_to_scrape['isScraped']:
             url, domain = extract_path_from_url(source_to_scrape['tag'])
             links = crawl(url, domain)
@@ -60,7 +55,6 @@ def scrape_and_store(source_id):
     except Exception as e:
         logging.error(f"Error processing {source_id}: {str(e)}")
     finally:
-        # Remove the job from the current_jobs set
         current_jobs.remove(source_id)
 
 def job():
@@ -85,14 +79,12 @@ def start_scraping(id):
     try:
         _id = ObjectId(id)
         source_to_scrape = sources_collection.find_one({'_id': _id, 'isStoredAtVectorDb': False})
-
         if source_to_scrape:
             thread = threading.Thread(target=scrape_and_store, args=(id,))
             thread.start()
             return jsonify({'message': 'Scraping job started successfully.'}), 200
         else:
             return jsonify({'error': 'No link sources found for the manager.'}), 404
-
     except Exception as e:
         logging.error(f"Error in start_scraping: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -103,9 +95,6 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    # Start the scheduler in a separate thread
-    scheduler_thread = threading.Thread(target=run_scheduler)
-    scheduler_thread.start()
-    app.run()
+logging.basicConfig(level=logging.INFO)
+scheduler_thread = threading.Thread(target=run_scheduler)
+scheduler_thread.start()

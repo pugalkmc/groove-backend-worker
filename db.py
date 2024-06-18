@@ -1,5 +1,6 @@
 from pymongo import MongoClient
+from config import MONGODB_URL
 
-client = MongoClient('mongodb+srv://pugalkmc:pugalkmc@cluster0.dzcnjxc.mongodb.net')
+client = MongoClient(MONGODB_URL)
 db = client['aibot']
 sources_collection = db['sources']

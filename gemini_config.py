@@ -5,10 +5,10 @@ import google.generativeai as genai
 import time
 import sys
 from db import sources_collection
-from bson import ObjectId
+from config import GOOGLE_API_KEY
 
 # Configure the Google Generative AI API
-genai.configure(api_key="AIzaSyC2wb3ccUFFA0eCe4yQVPQ1WG01oQlZNM4")
+genai.configure(api_key=GOOGLE_API_KEY)
 
 # Set up the model
 generation_config = {
@@ -42,7 +42,7 @@ def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
         # chunks = load_progress(_id, 'chunking')
         # if not chunks:
         chunks = chunk_text(web_content)
-        sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(chunks)}})
+        sources_collection.update_one({'_id': _id}, {'$set': {'chunkLength': len(chunks)}})
             # save_progress(_id, 'chunking', [chunk.dict() for chunk in chunks])
 
         # formatted_chunks = load_progress(_id, 'embedding')
