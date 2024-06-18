@@ -7,3 +7,4 @@ langchain-community==0.2.5
 pinecone-client==4.1.1
 schedule==1.2.2
 flask-cors==4.0.1
+gunicorn
