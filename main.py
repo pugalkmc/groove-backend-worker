@@ -12,20 +12,20 @@ import schedule
 import time
 from db import sources_collection
 from pinecone import Pinecone, ServerlessSpec
-from flask_cors import CORS
+# from flask_cors import CORS
 from config import PINECONE_API_KEY
 
 current_jobs = set()
 
 app = Flask(__name__)
-CORS(app)
+# CORS(app)
 
-@app.before_request
-def before_request():
-    if request.remote_addr == 'specific_server_ip':
-        CORS(app, resources={r"/*": {"origins": "http://specificserver.com"}})
-    else:
-        CORS(app, resources={r"/*": {"origins": "*"}})
+# @app.before_request
+# def before_request():
+#     if request.remote_addr == 'specific_server_ip':
+#         CORS(app, resources={r"/*": {"origins": "http://specificserver.com"}})
+#     else:
+#         CORS(app, resources={r"/*": {"origins": "*"}})
 
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "common"
