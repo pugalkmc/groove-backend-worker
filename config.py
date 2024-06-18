@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PINECONE_API_KEY = getenv("GOOGLE_API_KEY")
+PINECONE_API_KEY = getenv("PINECONE_API_KEY")
 
 GOOGLE_API_KEY = getenv("GOOGLE_API_KEY")
 
