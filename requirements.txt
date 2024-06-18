@@ -1,0 +1,9 @@
+flask==3.0.3
+pymongo==4.7.3
+bson==0.5.10
+google-generativeai==0.7.0
+langchain==0.2.5
+langchain-community==0.2.5
+pinecone-client==4.1.1
+schedule==1.2.2
+flask-cors==4.0.1
