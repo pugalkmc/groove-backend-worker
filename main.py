@@ -56,10 +56,11 @@ def scrape_and_store(source_id):
             if source_id in current_jobs:
                 current_jobs.remove(source_id)
         if source_id in current_jobs:
+            print("Job removed", source_id)
             current_jobs.remove(source_id)
 
 def job():
-    print("Checking for new job")
+    print("\nChecking for new job")
     sources_to_scrape = sources_collection.find({'isStoredAtVectorDb': False})
     for source in sources_to_scrape:
         source_id = str(source['_id'])
@@ -71,7 +72,7 @@ def job():
         thread = threading.Thread(target=scrape_and_store, args=(source_id,))
         thread.start()
 
-job()
+# job()
 
 @app.route('/api/project/source/link/<string:id>', methods=['POST'])
 def start_scraping(id):

@@ -123,17 +123,20 @@ def chunk_text(documents, chunk_size=1000, chunk_overlap=100):
     return text_splitter.split_documents(documents)
 
 def embed_bulk_chunks(chunks, model_name="models/embedding-001", task_type="retrieval_document"):
-    try:
-        # Create embeddings
-        embeddings = genai.embed_content(
-            model=model_name,
-            content=chunks,
-            task_type=task_type
-        )
-        return embeddings['embedding']
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return []
+    tries = 1
+    while tries<=5:
+        try:
+            # Create embeddings
+            embeddings = genai.embed_content(
+                model=model_name,
+                content=chunks,
+                task_type=task_type
+            )
+            return embeddings['embedding']
+        except Exception as e:
+            tries += 1
+            print(f"An error occurred: {e}")
+    return []
 
 def embedding_gemini(chunks, tag):
     chunks = [chunk.page_content for chunk in chunks]
