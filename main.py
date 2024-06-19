@@ -64,11 +64,11 @@ def job():
         if source_id in current_jobs:
             continue
         if not source.get('isScraped'):
-            current_jobs.add(str(source.get('_id')))
+            current_jobs.add(str(source['_id']))
             thread = threading.Thread(target=scrape_and_store, args=(str(source['_id']),))
             thread.start()
         elif source.get('isScraped') and not source.get('isStoredAtVectorDb'):
-            current_jobs.add(str(source.get('_id')))
+            current_jobs.add(str(source['_id']))
             thread = threading.Thread(target=scrape_and_store, args=(str(source['_id']),))
             thread.start()
 
