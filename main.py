@@ -49,6 +49,7 @@ def scrape_and_store(source_id):
             if status:
                 sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
     except Exception as e:
+        print("New error")
         logging.error(f"Error processing {source_id}: {str(e)}")
     finally:
         with threading.Lock():
@@ -93,7 +94,7 @@ def start_scraping(id):
         return jsonify({'error': str(e)}), 500
 
 def run_scheduler():
-    schedule.every(10).minutes.do(job)
+    schedule.every(1).minutes.do(job)
     while True:
         schedule.run_pending()
         time.sleep(1)
