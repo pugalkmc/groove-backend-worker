@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 # Set up Flask application
 app = Flask(__name__)
 
-current_jobs = set()
+current_job = [None]
+job_queue = []
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "common"
 BATCH_SIZE = 1000
@@ -49,26 +50,36 @@ def scrape_and_store(source_id):
             status = gemini_config.extract_and_store(index, BATCH_SIZE, links, str(source_to_scrape['_id']), str(source_to_scrape['manager']))
             if status:
                 sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
+        logger.info(f"Finished scrape_and_store for source_id: {source_id}")
     except Exception as e:
         logger.error(f"Error processing {source_id}: {str(e)}", exc_info=True)
     finally:
         with threading.Lock():
-            current_jobs.discard(source_id)
-        logger.info(f"Finished scrape_and_store for source_id: {source_id}")
+            current_job[0] = None
+            if job_queue:
+                next_job = job_queue.pop(0)
+                current_job[0] = next_job
+                thread = threading.Thread(target=scrape_and_store, args=(next_job,))
+                thread.start()
 
 def job():
     logger.info("Searching for job")
     sources_to_scrape = sources_collection.find({'isStoredAtVectorDb': False})
     for source in sources_to_scrape:
         source_id = str(source['_id'])
-        if source_id in current_jobs:
+        if current_job[0] == source_id:
             continue
-        with threading.Lock():
-            current_jobs.add(source_id)
-        thread = threading.Thread(target=scrape_and_store, args=(source_id,))
+        if source_id in job_queue:
+            continue
+        job_queue.append(source_id)
+
+    if not current_job[0] and job_queue:
+        next_job = job_queue.pop(0)
+        current_job[0] = next_job
+        thread = threading.Thread(target=scrape_and_store, args=(next_job,))
         thread.start()
 
-logger.info("Started seaching for first job")
+logger.info("Started searching for first job")
 job()
 
 @app.route('/api/project/source/link/<string:id>', methods=['POST'])
@@ -78,13 +89,11 @@ def start_scraping(id):
         source_to_scrape = sources_collection.find_one({'_id': _id, 'isStoredAtVectorDb': False})
         if source_to_scrape:
             with threading.Lock():
-                if id not in current_jobs:
-                    current_jobs.add(id)
-                    thread = threading.Thread(target=scrape_and_store, args=(id,))
-                    thread.start()
-                    return jsonify({'message': 'Scraping job started successfully.'}), 200
+                if id not in job_queue and id != current_job[0]:
+                    job_queue.append(id)
+                    return jsonify({'message': 'Scraping job queued successfully.'}), 200
                 else:
-                    return jsonify({'error': 'Job is already in progress.'}), 400
+                    return jsonify({'error': 'Job is already in progress or queued.'}), 400
         else:
             return jsonify({'error': 'No link sources found for the manager.'}), 404
     except Exception as e:
@@ -101,3 +110,9 @@ if __name__ == "__main__":
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.start()
     app.run(debug=False, host='0.0.0.0', port=5000)
+
+
+# class Document:
+#     def __init__(self, page_content, metadata):
+#         self.page_content = page_content
+#         self.metadata = metadata
