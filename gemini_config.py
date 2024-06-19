@@ -42,11 +42,7 @@ def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
         # chunks = load_progress(_id, 'chunking')
         # if not chunks:
         chunks = chunk_text(web_content)
-        print("Total chunks made: ", len(chunks), "ID: ",_id, " type:",type(_id))
         sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(chunks)}})
-        print(sources_collection.find_one({'_id': ObjectId(_id)}))
-        sources_collection.update_one({'_id': _id}, {'$set': {'chunkLength': len(chunks)}})
-        print(sources_collection.find_one({'_id': _id}))
             # save_progress(_id, 'chunking', [chunk.dict() for chunk in chunks])
 
         # formatted_chunks = load_progress(_id, 'embedding')
