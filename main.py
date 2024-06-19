@@ -14,20 +14,20 @@ from scraper import crawl
 import gemini_config
 from config import PINECONE_API_KEY
 
-# Configure logging to suppress Werkzeug startup messages
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set up Flask application
 app = Flask(__name__)
 
-# Your existing application code here...
 current_jobs = set()
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "common"
 BATCH_SIZE = 1000
 DIMENSION = 768
 
+# Ensure the index exists
 if INDEX_NAME not in pc.list_indexes().names():
     pc.create_index(INDEX_NAME, dimension=DIMENSION, spec=ServerlessSpec(cloud='aws', region='us-east-1'))
 
@@ -35,6 +35,7 @@ index = pc.Index(INDEX_NAME)
 
 def scrape_and_store(source_id):
     try:
+        logger.info(f"Starting scrape_and_store for source_id: {source_id}")
         source_to_scrape = sources_collection.find_one({'_id': ObjectId(source_id)})
         if source_to_scrape and not source_to_scrape['isScraped']:
             url, domain = extract_path_from_url(source_to_scrape['tag'])
@@ -49,18 +50,14 @@ def scrape_and_store(source_id):
             if status:
                 sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
     except Exception as e:
-        print("New error")
-        logging.error(f"Error processing {source_id}: {str(e)}")
+        logger.error(f"Error processing {source_id}: {str(e)}", exc_info=True)
     finally:
         with threading.Lock():
-            if source_id in current_jobs:
-                current_jobs.remove(source_id)
-        if source_id in current_jobs:
-            print("Job removed", source_id)
-            current_jobs.remove(source_id)
+            current_jobs.discard(source_id)
+        logger.info(f"Finished scrape_and_store for source_id: {source_id}")
 
 def job():
-    print("\nChecking for new job")
+    logger.info("Searching for job")
     sources_to_scrape = sources_collection.find({'isStoredAtVectorDb': False})
     for source in sources_to_scrape:
         source_id = str(source['_id'])
@@ -68,11 +65,11 @@ def job():
             continue
         with threading.Lock():
             current_jobs.add(source_id)
-        print("New job found to be pending", source_id)
         thread = threading.Thread(target=scrape_and_store, args=(source_id,))
         thread.start()
 
-# job()
+logger.info("Started seaching for first job")
+job()
 
 @app.route('/api/project/source/link/<string:id>', methods=['POST'])
 def start_scraping(id):
@@ -91,11 +88,11 @@ def start_scraping(id):
         else:
             return jsonify({'error': 'No link sources found for the manager.'}), 404
     except Exception as e:
-        logging.error(f"Error in start_scraping: {str(e)}")
+        logger.error(f"Error in start_scraping: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 def run_scheduler():
-    schedule.every(1).minutes.do(job)
+    schedule.every(10).minutes.do(job)
     while True:
         schedule.run_pending()
         time.sleep(1)
