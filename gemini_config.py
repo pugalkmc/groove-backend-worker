@@ -8,7 +8,20 @@ from db import sources_collection
 from config import GOOGLE_API_KEY
 
 # Configure the Google Generative AI API
+
+import json
+import os
+import sys
+import logging
+from bson import ObjectId
+
+PROGRESS_FILE = "progress.json"
+
 genai.configure(api_key=GOOGLE_API_KEY)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set up the model
 generation_config = {
@@ -31,43 +44,73 @@ model = genai.GenerativeModel(
     safety_settings=safety_settings,
 )
 
+def load_progress():
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE, 'r') as file:
+            return json.load(file)
+    return {}
+
+def save_progress(progress):
+    with open(PROGRESS_FILE, 'w') as file:
+        json.dump(progress, file)
 
 def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
+    progress = load_progress()
+    current_progress = progress.get(_id, {"step": "start"})
+
     try:
-        # web_content = load_progress(_id, 'scraping')
-        # if not web_content:
-            
-            # save_progress(_id, 'scraping', web_content)
-        web_content = estimate_and_scrap_websites(links)
-        # chunks = load_progress(_id, 'chunking')
-        # if not chunks:
-        chunks = chunk_text(web_content)
-        sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(chunks)}})
-            # save_progress(_id, 'chunking', [chunk.dict() for chunk in chunks])
+        if current_progress["step"] == "start":
+            logger.info(f"Step: start. Scraping websites for ID: {_id}")
+            web_content = estimate_and_scrap_websites(links)
+            progress[_id] = {"step": "scraped", "web_content": web_content}
+            save_progress(progress)
+        else:
+            web_content = current_progress["web_content"]
 
-        # formatted_chunks = load_progress(_id, 'embedding')
-        # if not formatted_chunks:
-        formatted_chunks = embedding_gemini(chunks, _id)
-            # save_progress(_id, 'embedding', formatted_chunks)
+        if current_progress["step"] in ["start", "scraped"]:
+            logger.info(f"Step: scraped. Chunking text for ID: {_id}")
+            chunks = chunk_text(web_content)
+            sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(chunks)}})
+            progress[_id] = {"step": "chunked", "chunks": chunks}
+            save_progress(progress)
+        else:
+            chunks = current_progress["chunks"]
 
-        BATCH_SIZE = 500
-        for i in range(0, len(formatted_chunks), BATCH_SIZE):
-            batch_data = formatted_chunks[i:i + BATCH_SIZE]
-            index.upsert(vectors=batch_data, namespace=namespace)
-            sys.stdout.write("\r")
-            sys.stdout.write(f"{i + 1} Chunks upserted")
-            sys.stdout.flush()
-        print("Upserted into Pinecone! Success")
+        if current_progress["step"] in ["start", "scraped", "chunked"]:
+            logger.info(f"Step: chunked. Embedding chunks for ID: {_id}")
+            formatted_chunks = embedding_gemini(chunks, _id)
+            progress[_id] = {"step": "formatted", "formatted_chunks": formatted_chunks, "chunks_processed": 0}
+            save_progress(progress)
+        else:
+            formatted_chunks = current_progress["formatted_chunks"]
 
-        # Clean up cache after successful completion
-        # os.remove(os.path.join(CACHE_DIR, f'{_id}_scraping.json'))
-        # os.remove(os.path.join(CACHE_DIR, f'{_id}_chunking.json'))
-        # os.remove(os.path.join(CACHE_DIR, f'{_id}_embedding.json'))
+        if current_progress["step"] in ["start", "scraped", "chunked", "formatted"]:
+            logger.info(f"Step: formatted. Upserting chunks into Pinecone for ID: {_id}")
+            chunks_to_process = formatted_chunks[current_progress["chunks_processed"]:]
+            for i in range(0, len(chunks_to_process), BATCH_SIZE):
+                batch_data = chunks_to_process[i:i + BATCH_SIZE]
+                index.upsert(vectors=batch_data, namespace=namespace)
+                sys.stdout.write("\r")
+                sys.stdout.write(f"{current_progress['chunks_processed'] + i + 1} Chunks upserted")
+                sys.stdout.flush()
+
+                progress[_id] = {
+                    "step": "formatted",
+                    "formatted_chunks": formatted_chunks,
+                    "chunks_processed": current_progress["chunks_processed"] + i + BATCH_SIZE
+                }
+                save_progress(progress)
+
+            logger.info(f"Upserted into Pinecone! Success for ID: {_id}")
+            del progress[_id]
+            save_progress(progress)
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.error(f"An error occurred for ID: {_id}: {e}")
         return False
+
     return True
+
 
 def extract_text_from_website(url):
     loader = WebBaseLoader(url)
@@ -114,7 +157,7 @@ def estimate_and_scrap_websites(urls):
 
     end_time = time.time()
     total_time_taken = end_time - start_time
-    print(f"\nTotal time taken for {total_urls} websites: {total_time_taken:.2f} seconds")
+    logger.info(f"\nTotal time taken for {total_urls} websites: {total_time_taken:.2f} seconds")
 
     return web_content
 
@@ -135,7 +178,7 @@ def embed_bulk_chunks(chunks, model_name="models/embedding-001", task_type="retr
             return embeddings['embedding']
         except Exception as e:
             tries += 1
-            print(f"An error occurred: {e}")
+            logger.info(f"An error occurred: {e}")
     return []
 
 def embedding_gemini(chunks, tag):
