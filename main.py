@@ -58,6 +58,7 @@ def scrape_and_store(source_id):
             current_jobs.remove(source_id)
 
 def job():
+    print("Checking for new job")
     sources_to_scrape = sources_collection.find({'isStoredAtVectorDb': False})
     for source in sources_to_scrape:
         source_id = str(source['_id'])
@@ -65,6 +66,7 @@ def job():
             continue
         with threading.Lock():
             current_jobs.add(source_id)
+        print("New job found to be pending", source_id)
         thread = threading.Thread(target=scrape_and_store, args=(source_id,))
         thread.start()
 
