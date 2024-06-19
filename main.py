@@ -1,5 +1,6 @@
 import os
 os.environ['USER_AGENT'] = 'pugal'
+
 from flask import Flask, jsonify, request
 from bson import ObjectId
 import threading
@@ -11,21 +12,17 @@ from pinecone import Pinecone, ServerlessSpec
 from functions import extract_path_from_url
 from scraper import crawl
 import gemini_config
-# from flask_cors import CORS
 from config import PINECONE_API_KEY
 
-current_jobs = set()
+# Configure logging to suppress Werkzeug startup messages
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
+# Set up Flask application
 app = Flask(__name__)
-# CORS(app)
 
-# @app.before_request
-# def before_request():
-#     if request.remote_addr == 'specific_server_ip':
-#         CORS(app, resources={r"/*": {"origins": "http://specificserver.com"}})
-#     else:
-#         CORS(app, resources={r"/*": {"origins": "*"}})
-
+# Your existing application code here...
+current_jobs = set()
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "common"
 BATCH_SIZE = 1000
@@ -57,6 +54,8 @@ def scrape_and_store(source_id):
         with threading.Lock():
             if source_id in current_jobs:
                 current_jobs.remove(source_id)
+        if source_id in current_jobs:
+            current_jobs.remove(source_id)
 
 def job():
     sources_to_scrape = sources_collection.find({'isStoredAtVectorDb': False})
@@ -97,6 +96,7 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 
-logging.basicConfig(level=logging.INFO)
-scheduler_thread = threading.Thread(target=run_scheduler)
-scheduler_thread.start()
+if __name__ == "__main__":
+    scheduler_thread = threading.Thread(target=run_scheduler)
+    scheduler_thread.start()
+    app.run(debug=False, host='0.0.0.0', port=5000)
