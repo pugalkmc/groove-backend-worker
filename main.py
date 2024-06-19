@@ -3,15 +3,14 @@ os.environ['USER_AGENT'] = 'pugal'
 from flask import Flask, jsonify, request
 from bson import ObjectId
 import threading
-import os
-from functions import extract_path_from_url
-from scraper import crawl
-import gemini_config
 import logging
 import schedule
 import time
 from db import sources_collection
 from pinecone import Pinecone, ServerlessSpec
+from functions import extract_path_from_url
+from scraper import crawl
+import gemini_config
 # from flask_cors import CORS
 from config import PINECONE_API_KEY
 
@@ -55,7 +54,9 @@ def scrape_and_store(source_id):
     except Exception as e:
         logging.error(f"Error processing {source_id}: {str(e)}")
     finally:
-        current_jobs.remove(source_id)
+        with threading.Lock():
+            if source_id in current_jobs:
+                current_jobs.remove(source_id)
 
 def job():
     sources_to_scrape = sources_collection.find({'isStoredAtVectorDb': False})
@@ -63,14 +64,10 @@ def job():
         source_id = str(source['_id'])
         if source_id in current_jobs:
             continue
-        if not source.get('isScraped'):
-            current_jobs.add(str(source['_id']))
-            thread = threading.Thread(target=scrape_and_store, args=(str(source['_id']),))
-            thread.start()
-        elif source.get('isScraped') and not source.get('isStoredAtVectorDb'):
-            current_jobs.add(str(source['_id']))
-            thread = threading.Thread(target=scrape_and_store, args=(str(source['_id']),))
-            thread.start()
+        with threading.Lock():
+            current_jobs.add(source_id)
+        thread = threading.Thread(target=scrape_and_store, args=(source_id,))
+        thread.start()
 
 job()
 
@@ -80,9 +77,14 @@ def start_scraping(id):
         _id = ObjectId(id)
         source_to_scrape = sources_collection.find_one({'_id': _id, 'isStoredAtVectorDb': False})
         if source_to_scrape:
-            thread = threading.Thread(target=scrape_and_store, args=(id,))
-            thread.start()
-            return jsonify({'message': 'Scraping job started successfully.'}), 200
+            with threading.Lock():
+                if id not in current_jobs:
+                    current_jobs.add(id)
+                    thread = threading.Thread(target=scrape_and_store, args=(id,))
+                    thread.start()
+                    return jsonify({'message': 'Scraping job started successfully.'}), 200
+                else:
+                    return jsonify({'error': 'Job is already in progress.'}), 400
         else:
             return jsonify({'error': 'No link sources found for the manager.'}), 404
     except Exception as e:
