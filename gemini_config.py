@@ -144,8 +144,7 @@ def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
 def extract_text_from_website(url):
     loader = WebBaseLoader(url)
     try:
-        documents = loader.load()
-        return [Document(page_content=doc.page_content, metadata={"source": url}) for doc in documents]
+        return loader.load()
     except Exception as e:
         logger.error(f"Failed to extract text from {url}: {e}")
         return []
