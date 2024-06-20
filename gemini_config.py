@@ -194,11 +194,10 @@ def estimate_and_scrap_websites(urls):
 
 def chunk_text(documents, chunk_size=1000, chunk_overlap=100):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    split_texts = text_splitter.split_documents(documents)
     chunks = []
-    for doc in documents:
-        split_texts = text_splitter.split_text(doc.page_content)
-        for i, split_text in enumerate(split_texts):
-            chunks.append(Document(page_content=f"{split_text}\nSource: {doc.metadata['source']}", metadata=doc.metadata, lookup_str=doc.lookup_str, lookup_index=i))
+    for i, doc in enumerate(split_texts):
+        chunks.append(Document(page_content=f"{doc.page_content}\nSource: {doc.metadata['source']}", metadata=doc.metadata, lookup_str=doc.lookup_str, lookup_index=i))
     return chunks
 
 def embed_bulk_chunks(chunks, model_name="models/embedding-001", task_type="retrieval_document"):
