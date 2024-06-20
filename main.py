@@ -109,7 +109,7 @@ def run_scheduler():
 if __name__ == "__main__":
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.start()
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=os.getenv("PORT", default=5000))
 
 
 # class Document:
