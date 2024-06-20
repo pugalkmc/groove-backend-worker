@@ -13,6 +13,7 @@ from functions import extract_path_from_url
 from scraper import crawl
 import gemini_config
 from config import PINECONE_API_KEY
+import file_process
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,10 @@ def scrape_and_store(source_id):
     try:
         logger.info(f"Starting scrape_and_store for source_id: {source_id}")
         source_to_scrape = sources_collection.find_one({'_id': ObjectId(source_id)})
+        if source_to_scrape and source_to_scrape['type'] == 'file' and not source_to_scrape['isStoredAtVectorDb']:
+            status = file_process.pdf_task_manager(source_id)
+            if status:
+                sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
         if source_to_scrape and not source_to_scrape['isScraped']:
             url, domain = extract_path_from_url(source_to_scrape['tag'])
             links = crawl(url, domain)
@@ -80,8 +85,27 @@ def job():
         thread = threading.Thread(target=scrape_and_store, args=(next_job,))
         thread.start()
 
+
 logger.info("Started searching for first job")
 job()
+
+@app.route('/api/project/source/file/<string:id>', methods=['POST'])
+def start_scraping_file(id):
+    try:
+        _id = ObjectId(id)
+        source_to_scrape = sources_collection.find_one({'_id': _id, 'isStoredAtVectorDb': False})
+        if source_to_scrape:
+            with threading.Lock():
+                if id not in job_queue and id != current_job[0]:
+                    job_queue.append(id)
+                    return jsonify({'message': 'Scraping job queued successfully.'}), 200
+                else:
+                    return jsonify({'error': 'Job is already in progress or queued.'}), 400
+        else:
+            return jsonify({'error': 'No link sources found for the manager.'}), 404
+    except Exception as e:
+        logger.error(f"Error in start_scraping: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/source/link/<string:id>', methods=['POST'])
 def start_scraping(id):
