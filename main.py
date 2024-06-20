@@ -25,7 +25,7 @@ current_job = [None]
 job_queue = []
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "common"
-BATCH_SIZE = 1000
+BATCH_SIZE = 500
 DIMENSION = 768
 
 # Ensure the index exists
