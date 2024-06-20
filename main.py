@@ -101,7 +101,7 @@ def start_scraping(id):
         return jsonify({'error': str(e)}), 500
 
 def run_scheduler():
-    schedule.every(10).minutes.do(job)
+    schedule.every(1).minutes.do(job)
     while True:
         schedule.run_pending()
         time.sleep(1)

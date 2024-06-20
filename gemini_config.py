@@ -9,6 +9,7 @@ from langchain_community.document_loaders import WebBaseLoader
 import google.generativeai as genai
 from db import sources_collection
 from config import GOOGLE_API_KEY
+import urllib3
 
 # Configure the Google Generative AI API
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -44,25 +45,34 @@ model = genai.GenerativeModel(
 )
 
 class Document:
-    def __init__(self, page_content, metadata):
+    def __init__(self, page_content, metadata, lookup_str='', lookup_index=0):
         self.page_content = page_content
         self.metadata = metadata
+        self.lookup_str = lookup_str
+        self.lookup_index = lookup_index
 
 def document_to_dict(doc):
     return {
         "page_content": doc.page_content,
-        "metadata": doc.metadata
+        "metadata": doc.metadata,
+        "lookup_str": doc.lookup_str,
+        "lookup_index": doc.lookup_index
     }
 
 def dict_to_document(doc_dict):
-    return Document(page_content=doc_dict["page_content"], metadata=doc_dict["metadata"])
+    return Document(
+        page_content=doc_dict["page_content"],
+        metadata=doc_dict["metadata"],
+        lookup_str=doc_dict.get("lookup_str", ''),
+        lookup_index=doc_dict.get("lookup_index", 0)
+    )
 
 def load_progress(_id, stage):
     file_path = os.path.join(CACHE_DIR, f'{_id}_{stage}.json')
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r') as file:
-                return json.load(file)
+                return [dict_to_document(doc_dict) for doc_dict in json.load(file)]
         except json.JSONDecodeError as e:
             logger.error(f"Error loading progress file {file_path}: {e}")
     return None
@@ -73,7 +83,7 @@ def save_progress(_id, stage, data):
     file_path = os.path.join(CACHE_DIR, f'{_id}_{stage}.json')
     try:
         with open(file_path, 'w') as file:
-            json.dump(data, file)
+            json.dump([document_to_dict(doc) if isinstance(doc, Document) else doc for doc in data], file)
     except Exception as e:
         logger.error(f"Error saving progress file {file_path}: {e}")
 
@@ -82,13 +92,13 @@ def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
         web_content = load_progress(_id, 'scraping')
         if not web_content:
             web_content = estimate_and_scrap_websites(links)
-            save_progress(_id, 'scraping', [document_to_dict(doc) for doc in web_content])
+            save_progress(_id, 'scraping', web_content)
 
         chunks = load_progress(_id, 'chunking')
         if not chunks:
             chunks = chunk_text(web_content)
             sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(chunks)}})
-            save_progress(_id, 'chunking', [document_to_dict(chunk) for chunk in chunks])
+            save_progress(_id, 'chunking', chunks)
 
         formatted_chunks = load_progress(_id, 'embedding')
         if not formatted_chunks:
@@ -116,7 +126,7 @@ def extract_text_from_website(url):
     loader = WebBaseLoader(url)
     try:
         documents = loader.load()
-        return documents
+        return [Document(page_content=doc.page_content, metadata={"source": url}) for doc in documents]
     except Exception as e:
         logger.error(f"Failed to extract text from {url}: {e}")
         return []
@@ -135,7 +145,7 @@ def estimate_and_scrap_websites(urls):
         url_start_time = time.time()
 
         # Extract content from the website
-        documents = extract_text_from_website(active_url)
+        documents = extract_text_from_website(url)
         web_content.extend(documents)
         active_url = []
 
@@ -165,14 +175,19 @@ def estimate_and_scrap_websites(urls):
 
 def chunk_text(documents, chunk_size=1000, chunk_overlap=100):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    return text_splitter.split_documents(documents)
+    chunks = []
+    for doc in documents:
+        split_texts = text_splitter.split_text(doc.page_content)
+        for i, split_text in enumerate(split_texts):
+            chunks.append(Document(page_content=split_text, metadata=doc.metadata, lookup_str=doc.lookup_str, lookup_index=i))
+    return chunks
 
 def embed_bulk_chunks(chunks, model_name="models/embedding-001", task_type="retrieval_document"):
     try:
         # Create embeddings
         embeddings = genai.embed_content(
             model=model_name,
-            content=chunks,
+            content=[chunk.page_content for chunk in chunks],
             task_type=task_type
         )
         return embeddings['embedding']
@@ -181,7 +196,6 @@ def embed_bulk_chunks(chunks, model_name="models/embedding-001", task_type="retr
         return []
 
 def embedding_gemini(chunks, tag):
-    chunks = [chunk.page_content for chunk in chunks]
     total_chunks = len(chunks)
     processed_chunks = 0
     total_processed_chunks = []
@@ -194,14 +208,15 @@ def embedding_gemini(chunks, tag):
         # Process each embedding and metadata
         for i, embedding in enumerate(embeddings):
             processed_chunks += 1
-            metadata = {"tag": tag, "source": chunk_data[i]}
+            chunk = chunk_data[i]
+            metadata = {"tag": tag, "source": chunk.page_content}
             total_processed_chunks.append({"id": f"{tag}_{processed_chunks}", "values": embedding, "metadata": metadata})
         logger.info(f"Processing chunk {processed_chunks}/{total_chunks}")
 
     return total_processed_chunks
 
 def generate_answer(retrieved_chunks, query):
-    context = "\n".join(retrieved_chunks)
+    context = "\n".join([chunk['metadata']['source'] for chunk in retrieved_chunks])
 
     prompt_parts = [
         f"input: {query}\ncontext: {context}",
