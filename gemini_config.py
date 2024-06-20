@@ -9,7 +9,6 @@ from langchain_community.document_loaders import WebBaseLoader
 import google.generativeai as genai
 from db import sources_collection
 from config import GOOGLE_API_KEY
-import urllib3
 
 # Configure the Google Generative AI API
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -199,7 +198,7 @@ def chunk_text(documents, chunk_size=1000, chunk_overlap=100):
     for doc in documents:
         split_texts = text_splitter.split_text(doc.page_content)
         for i, split_text in enumerate(split_texts):
-            chunks.append(Document(page_content=split_text, metadata=doc.metadata, lookup_str=doc.lookup_str, lookup_index=i))
+            chunks.append(Document(page_content=f"{split_text}\nSource: {doc.metadata['source']}", metadata=doc.metadata, lookup_str=doc.lookup_str, lookup_index=i))
     return chunks
 
 def embed_bulk_chunks(chunks, model_name="models/embedding-001", task_type="retrieval_document"):
