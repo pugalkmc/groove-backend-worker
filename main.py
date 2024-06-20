@@ -34,6 +34,7 @@ if INDEX_NAME not in pc.list_indexes().names():
 
 index = pc.Index(INDEX_NAME)
 
+
 def scrape_and_store(source_id):
     try:
         logger.info(f"Starting scrape_and_store for source_id: {source_id}")
