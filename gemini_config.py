@@ -87,6 +87,26 @@ def save_progress(_id, stage, data):
     except Exception as e:
         logger.error(f"Error saving progress file {file_path}: {e}")
 
+def load_embedding_progress(_id):
+    file_path = os.path.join(CACHE_DIR, f'{_id}_embedding.json')
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as file:
+                return json.load(file)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error loading embedding progress file {file_path}: {e}")
+    return None
+
+def save_embedding_progress(_id, data):
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
+    file_path = os.path.join(CACHE_DIR, f'{_id}_embedding.json')
+    try:
+        with open(file_path, 'w') as file:
+            json.dump(data, file)
+    except Exception as e:
+        logger.error(f"Error saving embedding progress file {file_path}: {e}")
+
 def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
     try:
         web_content = load_progress(_id, 'scraping')
@@ -100,10 +120,10 @@ def extract_and_store(index, BATCH_SIZE, links, _id, namespace):
             sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(chunks)}})
             save_progress(_id, 'chunking', chunks)
 
-        formatted_chunks = load_progress(_id, 'embedding')
+        formatted_chunks = load_embedding_progress(_id)
         if not formatted_chunks:
             formatted_chunks = embedding_gemini(chunks, _id)
-            save_progress(_id, 'embedding', formatted_chunks)
+            save_embedding_progress(_id, formatted_chunks)
 
         logger.info("Started upserting vector embedding into Pinecone")
         for i in range(0, len(formatted_chunks), BATCH_SIZE):
