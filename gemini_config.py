@@ -229,7 +229,7 @@ def embedding_gemini(chunks, tag):
             metadata = {"tag": tag, "source": chunk.page_content}
             total_processed_chunks.append({"id": f"{tag}_{processed_chunks}", "values": embedding, "metadata": metadata})
         logger.info(f"Processing chunk {processed_chunks}/{total_chunks}")
-
+    
     return total_processed_chunks
 
 def generate_answer(retrieved_chunks, query):

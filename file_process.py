@@ -16,7 +16,7 @@ class Document:
         self.lookup_index = ""
 
 def split_text_for_pdf(pages, chunk_size=1000, chunk_overlap=100):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return text_splitter.split_documents(pages)
 
 def upsert_into_pinecone(index, formatted_chunks,namespace, BATCH_SIZE):
@@ -41,8 +41,11 @@ def pdf_task_manager(_id, index):
         page_contents = source['values']
         manager = source['manager']
         pages = [Document(page) for page in page_contents]
-        row_chunks = split_text_for_pdf(index, pages, BATCH_SIZE)
+        row_chunks = split_text_for_pdf(pages)
+        sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(row_chunks)}})
         formatted_chunks = embedding_gemini(row_chunks, _id)
-        return upsert_into_pinecone(index, formatted_chunks, manager, BATCH_SIZE)
+
+        print(formatted_chunks)
+        upsert_into_pinecone(index, formatted_chunks, manager, BATCH_SIZE)
     except:
         return False

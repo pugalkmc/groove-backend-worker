@@ -41,7 +41,7 @@ def scrape_and_store(source_id):
         logger.info(f"Starting scrape_and_store for source_id: {source_id}")
         source_to_scrape = sources_collection.find_one({'_id': ObjectId(source_id)})
         if source_to_scrape and source_to_scrape['type'] == 'file' and not source_to_scrape['isStoredAtVectorDb']:
-            status = file_process.pdf_task_manager(source_id)
+            status = file_process.pdf_task_manager(source_id, index)
             if status:
                 sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
         if source_to_scrape and not source_to_scrape['isScraped']:
