@@ -51,12 +51,14 @@ class Document:
         self.lookup_index = lookup_index
 
 def document_to_dict(doc):
-    return {
-        "page_content": doc.page_content,
-        "metadata": doc.metadata,
-        "lookup_str": doc.lookup_str,
-        "lookup_index": doc.lookup_index
-    }
+    if isinstance(doc, Document):
+        return {
+            "page_content": doc.page_content,
+            "metadata": doc.metadata,
+            "lookup_str": doc.lookup_str,
+            "lookup_index": doc.lookup_index
+        }
+    return doc  # Return as is if not a Document instance
 
 def dict_to_document(doc_dict):
     return Document(
@@ -82,9 +84,10 @@ def save_progress(_id, stage, data):
     file_path = os.path.join(CACHE_DIR, f'{_id}_{stage}.json')
     try:
         with open(file_path, 'w') as file:
-            json.dump([document_to_dict(doc) if isinstance(doc, Document) else doc for doc in data], file)
+            json.dump([document_to_dict(doc) for doc in data], file)
     except Exception as e:
         logger.error(f"Error saving progress file {file_path}: {e}")
+
 
 def load_embedding_progress(_id):
     file_path = os.path.join(CACHE_DIR, f'{_id}_embedding.json')
