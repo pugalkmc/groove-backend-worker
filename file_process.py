@@ -44,8 +44,8 @@ def pdf_task_manager(_id, index):
         row_chunks = split_text_for_pdf(pages)
         sources_collection.update_one({'_id': ObjectId(_id)}, {'$set': {'chunkLength': len(row_chunks)}})
         formatted_chunks = embedding_gemini(row_chunks, _id)
-
-        print(formatted_chunks)
         upsert_into_pinecone(index, formatted_chunks, manager, BATCH_SIZE)
-    except:
+        return True
+    except Exception as e:
+        print(e)
         return False
