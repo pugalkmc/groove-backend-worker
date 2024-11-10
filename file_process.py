@@ -1,7 +1,7 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from db import sources_collection
 from bson import ObjectId
-from gemini_config import embedding_gemini
+from rag_functions import embedding_gemini
 import logging
 
 logging.basicConfig(level=logging.INFO)

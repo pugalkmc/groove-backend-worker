@@ -10,8 +10,8 @@ import time
 from db import sources_collection
 from pinecone import Pinecone, ServerlessSpec
 from functions import extract_path_from_url
-from scraper import crawl
-import gemini_config
+from url_scraper import crawl
+import rag_functions
 from config import PINECONE_API_KEY
 import file_process
 
@@ -48,12 +48,12 @@ def scrape_and_store(source_id):
             url, domain = extract_path_from_url(source_to_scrape['tag'])
             links = crawl(url, domain)
             sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isScraped': True, 'values': links}})
-            status = gemini_config.extract_and_store(index, BATCH_SIZE, links, str(source_to_scrape['_id']), str(source_to_scrape['manager']))
+            status = rag_functions.extract_and_store(index, BATCH_SIZE, links, str(source_to_scrape['_id']), str(source_to_scrape['manager']))
             if status:
                 sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
         elif source_to_scrape and source_to_scrape['isScraped'] and not source_to_scrape['isStoredAtVectorDb']:
             links = source_to_scrape['values']
-            status = gemini_config.extract_and_store(index, BATCH_SIZE, links, str(source_to_scrape['_id']), str(source_to_scrape['manager']))
+            status = rag_functions.extract_and_store(index, BATCH_SIZE, links, str(source_to_scrape['_id']), str(source_to_scrape['manager']))
             if status:
                 sources_collection.update_one({'_id': ObjectId(source_id)}, {'$set': {'isStoredAtVectorDb': True}})
         logger.info(f"Finished scrape_and_store for source_id: {source_id}")
